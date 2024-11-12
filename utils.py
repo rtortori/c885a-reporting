@@ -1,5 +1,6 @@
 import json
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.dates import DateFormatter
 from datetime import datetime
@@ -7,6 +8,10 @@ import os
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, PageBreak, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib import colors
+from PyPDF2 import PdfMerger
 
 # Configurable variables
 tolerance_seconds = 5  # Tolerance to identify readings belonging to the same period in seconds
@@ -18,6 +23,65 @@ def load_data(file_path):
     df = pd.DataFrame(data)
     df["Timestamp"] = pd.to_datetime(df["Timestamp"], format='ISO8601')
     return df
+
+def generate_statistics(df):
+    """Generate statistics for each sensor in the DataFrame."""
+    statistics = []
+    for name in df["Name"].unique():
+        try:
+            data_series = df[df["Name"] == name]["Reading"].dropna()
+            if not data_series.empty:
+                min_val = np.min(data_series)
+                max_val = np.max(data_series)
+                avg_val = np.mean(data_series)
+                median_val = np.median(data_series)
+                # Store numerical values directly
+                statistics.append((name, min_val, max_val, avg_val, median_val))
+            else:
+                statistics.append((name, None, None, None, None))
+        except Exception as e:
+            statistics.append((name, None, None, None, None))
+    return statistics
+
+def generate_statistics_pdf(statistics_data, statistics_pdf_path):
+    # Create a list to hold table data
+    table_data = [["Sensor", "Min", "Max", "Avg", "Median"]]
+
+    # Prepare table data
+    for sensor_name, min_val, max_val, avg_val, median_val in statistics_data:
+        if min_val is not None:
+            table_data.append([
+                sensor_name,
+                f"{min_val:.2f}",
+                f"{max_val:.2f}",
+                f"{avg_val:.2f}",
+                f"{median_val:.2f}"
+            ])
+        else:
+            table_data.append([sensor_name, "N/A", "N/A", "N/A", "N/A"])
+
+    # Create Table
+    table = Table(table_data, repeatRows=1)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),  # Make sensor names bold
+    ]))
+
+    # Build the statistics PDF with title
+    doc = SimpleDocTemplate(statistics_pdf_path, pagesize=letter)
+    styles = getSampleStyleSheet()
+    elements = [
+        Paragraph("4. Statistics", styles['Heading1']),
+        Spacer(1, 12),
+        table
+    ]
+    doc.build(elements)
 
 def plot_temperature_data(df, temperatures_dir):
     """Generate temperature plots for different components and save them in the temperatures directory."""
@@ -187,7 +251,7 @@ def create_table_of_contents(c, sections):
     y_position = 700
     for section in sections:
         c.drawString(40, y_position, section[0])
-        c.linkRect("", section[1], (40, y_position, 550, y_position + 20))
+        c.linkRect("", section[1], (40, y_position - 10, 550, y_position + 10), relative=1)
         y_position -= 20
     c.showPage()
 
@@ -211,7 +275,6 @@ def create_pdf_report(first_timestamp, last_timestamp, report_dir, psu_dir, fan_
     sections = [
         ("1. PSUs", "PSUs"),
         ("  1.1 Total Power", "Total_Power"),
-        #("  1.2 Breakdown", "Breakdown"),
         ("  1.2 GPU Tray PSU Usage", "GPU_Tray_PSU_Usage"),
         ("  1.3 CPU Tray PSU Usage", "CPU_Tray_PSU_Usage"),
         ("2. FANs", "FANs"),
@@ -225,7 +288,8 @@ def create_pdf_report(first_timestamp, last_timestamp, report_dir, psu_dir, fan_
         ("  3.3 GPU Tray Temperatures", "GPU_Tray_Temperatures"),
         ("  3.4 GPUs Temperatures", "GPUs_Temperatures"),
         ("  3.5 Memory Temperatures", "Memory_Temperatures"),
-        ("  3.6 NVME Disks Temperatures", "NVME_Disks_Temperatures")
+        ("  3.6 NVME Disks Temperatures", "NVME_Disks_Temperatures"),
+        ("4. Statistics", "NVME_Disks_Temperatures")
     ]
     create_table_of_contents(c, sections)
 
@@ -250,21 +314,6 @@ def create_pdf_report(first_timestamp, last_timestamp, report_dir, psu_dir, fan_
     else:
         c.drawString(40, height - 110, "Total Power plot not found.")
     c.showPage()
-
-    #c.bookmarkPage("Breakdown")
-    #c.addOutlineEntry("1.2 Breakdown", "Breakdown", level=1)
-    #c.drawString(40, height - 50, "1.2 Breakdown")
-    #img_path = os.path.join(psu_dir, "total_psu_power_breakdown.png")
-    #if os.path.exists(img_path):
-    #    img = ImageReader(img_path)
-    #    img_width, img_height = img.getSize()
-    #    aspect = img_height / float(img_width)
-    #    width_needed = (width - 80) * 0.75  # Absolute 75% scale
-    #    height_needed = width_needed * aspect
-    #    c.drawImage(img, 40, height - 50 - height_needed - 20, width_needed, height_needed)
-    #else:
-    #    c.drawString(40, height - 110, "Breakdown plot not found.")
-    #c.showPage()
 
     # GPU Tray PSU Usage
     c.bookmarkPage("GPU_Tray_PSU_Usage")
@@ -544,4 +593,30 @@ def create_pdf_report(first_timestamp, last_timestamp, report_dir, psu_dir, fan_
         c.drawString(40, height - 110, "NVME Disks Temperatures plot not found.")
     c.showPage()
 
+    # Placeholder for the Statistics page
+    c.bookmarkPage("Statistics")
+
+    ## Generate statistics from each data source
+    psu_stats = generate_statistics(load_data("psu_readings.json"))
+    fan_stats = generate_statistics(load_data("fan_readings.json"))
+    temp_stats = generate_statistics(load_data("temp_readings.json"))
+
+    # Combine and sort statistics by sensor name
+    all_stats = sorted(psu_stats + fan_stats + temp_stats, key=lambda x: x[0])
+
+    # Create temporary statistics PDF
+    statistics_pdf_path = os.path.join(report_dir, "temp_statistics.pdf")
+    generate_statistics_pdf(all_stats, statistics_pdf_path)
+
+    # Save and Merge Statistics PDF
     c.save()
+
+    # Merge the main PDF with the statistics PDF
+    merger = PdfMerger()
+    merger.append(pdf_path)
+    merger.append(statistics_pdf_path)
+    merger.write(pdf_path)
+    merger.close()
+
+    # Remove temporary statistics PDF
+    os.remove(statistics_pdf_path)
