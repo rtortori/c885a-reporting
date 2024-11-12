@@ -26,21 +26,21 @@ To set up and run the scripts, follow these steps:
 
 1. **Clone the repository**:
 
-```bash
+```
 git clone https://github.com/rtortori/c885a-reporting.git
 cd c885a-reporting
 ```
 
 2. **Install Python dependencies**:
 
-```bash
+```
 pip install -r requirements.txt
 ```
 
 3. **Install CairoSVG**:
 Depending on your operating system, you may need to install CairoSVG separately. Instructions vary, but typically you can use a package manager like apt for Ubuntu or brew for macOS:
 
-```bash
+```
 # On Ubuntu
 sudo apt-get install libcairo2-dev libjpeg-dev libgif-dev
 
@@ -54,13 +54,13 @@ brew install cairo
 
 Set your BMC password as an environment variable:
 
-```bash
+```
 export BMC_PASSWORD='your_password'
 ```
 
 Use `get_stats.py` to collect performance metrics from the server. By default it will run indefinitely (stop with `kill` or `CTRL+C`):
 
-```bash
+```
 % python get_stats.py -h                                                                          
 usage: get_stats.py [-h] --bmc-ip BMC_IP --bmc-username BMC_USERNAME --probe-every PROBE_EVERY [--collect-for COLLECT_FOR]
 
@@ -77,7 +77,7 @@ options:
                         Duration in seconds for which to collect data. Runs indefinitely if not specified.
 ```
 
-```bash
+```
 python get_stats.py --server-ip=X.Y.Z.K --username=mybmcusername --probe-every=15
 ```
 
@@ -85,7 +85,7 @@ python get_stats.py --server-ip=X.Y.Z.K --username=mybmcusername --probe-every=1
 
 Use `plot_stats.py` to generate plots and a PDF report from the collected data:
 
-```bash
+```
 % python plot_stats.py -h
 usage: plot_stats.py [-h] [--resample RESAMPLE]
 
@@ -96,7 +96,7 @@ options:
   --resample RESAMPLE  Number of samples to skip for each sensor. Default is 1 (consider all samples).
 ```
 
-```bash
+```
 python plot_stats.py --resample 2 #Use higher numbers to reduce plot density.
 ```
 
